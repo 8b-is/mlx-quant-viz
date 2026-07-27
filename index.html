@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>mlx-quant-viz — ternary matrix {-1, 0, +1}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{background:#0b0c0e;color:#c8d6e5;font-family:'JetBrains Mono',monospace;min-height:100vh}
+  header{padding:20px 28px;background:linear-gradient(180deg,rgba(11,12,14,.98),transparent);display:flex;justify-content:space-between;align-items:center}
+  header h1{font-size:16px;font-weight:400;letter-spacing:.25em;color:#a29bfe}
+  header h1 span{color:#6c5ce7}
+  .nav{display:flex;gap:8px}
+  button{background:rgba(162,155,254,.08);border:1px solid rgba(162,155,254,.15);color:#a29bfe;padding:6px 14px;border-radius:6px;cursor:pointer;font-family:inherit;font-size:11px;transition:all .15s}
+  button:hover{background:rgba(162,155,254,.18);border-color:rgba(162,155,254,.3)}
+  button.active{background:rgba(108,92,231,.25);border-color:#6c5ce7;color:#fff}
+  main{max-width:1200px;margin:0 auto;padding:24px}
+  .grid-section{display:flex;gap:32px;flex-wrap:wrap;align-items:flex-start}
+  .panel{background:rgba(11,12,14,.8);border:1px solid rgba(162,155,254,.08);border-radius:10px;padding:16px}
+  .panel h3{font-size:12px;color:#a29bfe;text-transform:uppercase;letter-spacing:.15em;margin-bottom:12px}
+  canvas{display:block;image-rendering:pixelated;border-radius:4px}
+  .stats{display:flex;gap:24px;flex-wrap:wrap;margin:24px 0}
+  .stat{text-align:center}
+  .stat .val{font-size:28px;font-weight:700;color:#a29bfe}
+  .stat .lbl{font-size:10px;color:#636e72;text-transform:uppercase;letter-spacing:.1em}
+  .rec{display:flex;gap:16px;align-items:center;overflow-x:auto;padding:16px 0}
+  .rec-step{text-align:center;flex-shrink:0}
+  .rec-step .label{font-size:10px;color:#636e72;margin-top:6px}
+  .rec-step .arrow{color:#6c5ce7;font-size:20px;margin:0 4px}
+  .legend{display:flex;gap:16px;margin:12px 0;font-size:10px}
+  .legend span{display:flex;align-items:center;gap:6px}
+  .dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+  .bin-view{font-size:10px;color:#8395a7;font-family:monospace;white-space:pre;overflow-x:auto;max-height:300px;overflow-y:auto;line-height:1.6}
+  .slider-group{margin:12px 0}
+  .slider-group label{display:block;font-size:10px;color:#636e72;margin-bottom:4px;text-transform:uppercase;letter-spacing:.1em}
+  input[type=range]{width:100%;accent-color:#6c5ce7}
+  footer{text-align:center;padding:24px;color:#636e72;font-size:10px;border-top:1px solid rgba(162,155,254,.06);margin-top:32px}
+  footer a{color:#6c5ce7;text-decoration:none}
+</style>
+</head>
+<body>
+<header>
+  <h1><span>mlx-quant-viz</span> &Sigma; {-1, 0, +1}</h1>
+  <div class="nav">
+    <button id="btn-matrix" class="active">Matrix</button>
+    <button id="btn-packed">Packed Binary</button>
+    <button id="btn-dist">Distribution</button>
+  </div>
+</header>
+<main>
+  <div class="stats">
+    <div class="stat"><div class="val" id="stat-size">4096&times;4096</div><div class="lbl">Matrix size</div></div>
+    <div class="stat"><div class="val" id="stat-fp32">67.11 MB</div><div class="lbl">fp32</div></div>
+    <div class="stat"><div class="val" id="stat-packed">5.24 MB</div><div class="lbl">ternary packed</div></div>
+    <div class="stat"><div class="val" id="stat-ratio">12.80x</div><div class="lbl">compression</div></div>
+    <div class="stat"><div class="val" id="stat-sparse">0%</div><div class="lbl">sparsity</div></div>
+  </div>
+
+  <div class="slider-group">
+    <label>Group size: <span id="gs-label">64</span></label>
+    <input type="range" id="gs-slider" min="32" max="128" value="64" step="32">
+  </div>
+  <div class="slider-group">
+    <label>Matrix dimension: <span id="dim-label">256</span> &times; <span id="dim-label2">256</span></label>
+    <input type="range" id="dim-slider" min="64" max="1024" value="256" step="64">
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:#6c5ce7"></span> -1</span>
+    <span><span class="dot" style="background:#1e1e22"></span> 0</span>
+    <span><span class="dot" style="background:#a29bfe"></span> +1</span>
+    <span><span class="dot" style="background:#2d2d35;border:1px solid rgba(162,155,254,.2)"></span> unquantized</span>
+  </div>
+
+  <div class="grid-section">
+    <div class="panel" style="flex:1;min-width:300px">
+      <h3>Original (fp32)</h3>
+      <canvas id="canvas-orig" width="256" height="256"></canvas>
+    </div>
+    <div class="panel" style="flex:1;min-width:300px">
+      <h3>Ternary Quantized {-1, 0, +1}</h3>
+      <canvas id="canvas-quant" width="256" height="256"></canvas>
+    </div>
+    <div class="panel" style="flex:1;min-width:300px">
+      <h3>Packed View (32-bit words)</h3>
+      <div class="bin-view" id="binary-view">Select a group...</div>
+    </div>
+  </div>
+
+  <div class="panel" style="margin-top:24px">
+    <h3>N &rarr; N-x Recursion — weight compression across layers</h3>
+    <div class="rec" id="recursion"></div>
+  </div>
+
+  <div id="hist-section" style="display:none;margin-top:24px" class="panel">
+    <h3>Weight Distribution</h3>
+    <canvas id="canvas-hist" width="600" height="150" style="width:100%;height:auto"></canvas>
+  </div>
+</main>
+<footer>
+  <a href="https://github.com/8b-is/mlx-quant-viz">mlx-quant-viz</a> — ternary quantization visualization &middot; <a href="https://arxiv.org/abs/2402.17764">BitNet b1.58</a> &middot; 16 codes per word LSB-first &middot; code &minus; 1 = {-1, 0, +1} &middot; scale = mean(|w|)
+</footer>
+
+<script>
+const SIZE = 256;
+const canvasOrig = document.getElementById('canvas-orig');
+const ctxOrig = canvasOrig.getContext('2d');
+const canvasQuant = document.getElementById('canvas-quant');
+const ctxQuant = canvasQuant.getContext('2d');
+const canvasHist = document.getElementById('canvas-hist');
+const ctxHist = canvasHist.getContext('2d');
+
+let groupSize = 64;
+let dim = 256;
+let weights = null;
+let quantized = null;
+let scales = null;
+let showPacked = true;
+
+function normalRandom(mean, std) {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function generateWeights() {
+  weights = new Float32Array(dim * dim);
+  for (let i = 0; i < dim * dim; i++) {
+    weights[i] = normalRandom(0, 1);
+  }
+  quantizeWeights();
+}
+
+function quantizeWeights() {
+  const n = dim * dim;
+  const groups = n / groupSize;
+  quantized = new Int8Array(n);
+  scales = new Float32Array(groups);
+  let zeroCount = 0;
+
+  for (let g = 0; g < groups; g++) {
+    let absSum = 0;
+    for (let j = 0; j < groupSize; j++) {
+      absSum += Math.abs(weights[g * groupSize + j]);
+    }
+    const scale = Math.max(absSum / groupSize, 1e-7);
+    scales[g] = scale;
+
+    for (let j = 0; j < groupSize; j++) {
+      const idx = g * groupSize + j;
+      const shifted = Math.round(Math.max(-1, Math.min(1, weights[idx] / scale))) + 1;
+      quantized[idx] = shifted;
+      if (shifted === 1) zeroCount++;
+    }
+  }
+
+  const sparsity = (zeroCount / n * 100).toFixed(1);
+  document.getElementById('stat-sparse').textContent = sparsity + '%';
+  document.getElementById('stat-size').textContent = dim + '\u00d7' + dim;
+  document.getElementById('stat-fp32').textContent = (n * 4 / (1024*1024)).toFixed(2) + ' MB';
+  const packedWords = Math.ceil(n / 16);
+  const scalesBytes = groups * 4;
+  const packedMB = (packedWords * 4 + scalesBytes) / (1024*1024);
+  document.getElementById('stat-packed').textContent = packedMB.toFixed(2) + ' MB';
+  document.getElementById('stat-ratio').textContent = ((n * 4) / (packedWords * 4 + scalesBytes)).toFixed(2) + 'x';
+}
+
+function drawMatrix(canvas, ctx, data, isQuant) {
+  canvas.width = dim; canvas.height = dim;
+  const img = ctx.createImageData(dim, dim);
+  for (let i = 0; i < dim * dim; i++) {
+    let val;
+    if (isQuant) {
+      val = quantized[i] - 1; // -1, 0, or +1
+    } else {
+      val = weights[i];
+    }
+    if (Math.abs(val) < 1e-6) {
+      img.data[i*4]=30; img.data[i*4+1]=30; img.data[i*4+2]=34; img.data[i*4+3]=255;
+    } else if (val > 0) {
+      const b = Math.min(255, Math.round(140 + val * 80));
+      img.data[i*4]=162; img.data[i*4+1]=155; img.data[i*4+2]=Math.min(255, b); img.data[i*4+3]=255;
+    } else {
+      const b = Math.min(255, Math.round(180 + Math.abs(val) * 70));
+      img.data[i*4]=Math.min(255, Math.round(108 + Math.abs(val)*60)); img.data[i*4+1]=Math.min(255,Math.round(92 + Math.abs(val)*45)); img.data[i*4+2]=Math.min(255,b); img.data[i*4+3]=255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function drawBinView(groupIdx) {
+  const packed = [];
+  for (let i = 0; i < groupSize; i += 16) {
+    let word = 0;
+    let line = '';
+    for (let j = 0; j < 16; j++) {
+      const code = quantized[groupIdx * groupSize + i + j];
+      word |= code << (2 * j);
+      line += code + ' ';
+      if (j === 7) line += '| ';
+    }
+    packed.push(`word[${i/16}]: 0x${word.toString(16).padStart(8,'0')}   codes: ${line}`);
+  }
+  document.getElementById('binary-view').textContent =
+    `Group ${groupIdx} (scale=${scales[groupIdx].toFixed(6)}):\n\n` +
+    `Packed uint32 words — 16 two-bit codes per word, LSB-first:\n` +
+    `Code 0→-1, 1→0, 2→+1\n\n` +
+    packed.join('\n');
+}
+
+function drawRecursion() {
+  const container = document.getElementById('recursion');
+  container.innerHTML = '';
+  const layers = [dim, Math.floor(dim*0.75), Math.floor(dim*0.5), Math.floor(dim*0.25), Math.floor(dim*0.125), Math.floor(dim*0.0625)];
+  layers.filter(s => s >= 8).forEach((s, i) => {
+    const step = document.createElement('div');
+    step.className = 'rec-step';
+    const c = document.createElement('canvas');
+    c.width = s; c.height = s; c.style.width = Math.max(32, s/2) + 'px'; c.style.height = Math.max(32, s/2) + 'px';
+    const ctx = c.getContext('2d');
+    const img = ctx.createImageData(s, s);
+    for (let y = 0; y < s; y++) {
+      for (let x = 0; x < s; x++) {
+        const si = Math.floor(y * dim / s);
+        const sj = Math.floor(x * dim / s);
+        const v = quantized[si * dim + sj] - 1;
+        // Re-quantize at new group size
+        const r = Math.max(0.1, 1 - i * 0.18);
+        const idx = y * s + x;
+        img.data[idx*4]=v<0?Math.round(108*r):v>0?Math.round(162*r):30;
+        img.data[idx*4+1]=v<0?Math.round(92*r):v>0?Math.round(155*r):30;
+        img.data[idx*4+2]=v<0?Math.round(231*r):v>0?Math.round(254*r):34;
+        img.data[idx*4+3]=255;
+      }
+    }
+    ctx.putImageData(img, 0, 0);
+    step.appendChild(c);
+    const lbl = document.createElement('div');
+    lbl.className = 'label';
+    lbl.textContent = s + '\u00d7' + s + ((i>0) ? ' (-' + (dim-s) + ')' : '');
+    step.appendChild(lbl);
+    container.appendChild(step);
+
+    if (i < layers.length - 1) {
+      const arr = document.createElement('span');
+      arr.className = 'arrow'; arr.textContent = '\u2192';
+      container.appendChild(arr);
+    }
+  });
+}
+
+function drawHistogram() {
+  const histCtx = ctxHist;
+  const W = 600, H = 150;
+  canvasHist.width = W; canvasHist.height = H;
+  histCtx.clearRect(0, 0, W, H);
+
+  const vals = Array.from(quantized).map(v => v - 1);
+  const counts = { '-1': vals.filter(v => v === -1).length, '0': vals.filter(v => v === 0).length, '1': vals.filter(v => v === 1).length };
+  const max = Math.max(...Object.values(counts));
+  const barW = 60, gap = 30, startX = (W - (barW*3 + gap*2))/2;
+
+  histCtx.fillStyle = '#8395a7'; histCtx.font = '10px JetBrains Mono';
+  const colors = { '-1': '#6c5ce7', '0': '#1e1e22', '1': '#a29bfe' };
+
+  Object.entries(counts).forEach(([k, v], i) => {
+    const x = startX + i * (barW + gap);
+    const barH = (v / max) * (H - 40);
+    histCtx.fillStyle = colors[k];
+    histCtx.fillRect(x, H - 20 - barH, barW, barH);
+    histCtx.fillStyle = '#c8d6e5';
+    histCtx.textAlign = 'center';
+    histCtx.fillText(k, x + barW/2, H - 4);
+    histCtx.fillText((v/(dim*dim)*100).toFixed(1)+'%', x + barW/2, H - 26 - barH);
+  });
+}
+
+function updateAll() {
+  drawMatrix(canvasOrig, ctxOrig, weights, false);
+  drawMatrix(canvasQuant, ctxQuant, quantized, true);
+  drawRecursion();
+  if (showPacked) drawBinView(0);
+  if (document.getElementById('hist-section').style.display !== 'none') drawHistogram();
+}
+
+canvasQuant.addEventListener('click', e => {
+  const rect = canvasQuant.getBoundingClientRect();
+  const sx = e.clientX - rect.left;
+  const sy = e.clientY - rect.top;
+  const row = Math.floor(sy / rect.height * dim);
+  const groupIdx = Math.floor(row * dim / groupSize);
+  drawBinView(groupIdx);
+});
+
+document.getElementById('gs-slider').addEventListener('input', function() {
+  groupSize = parseInt(this.value);
+  document.getElementById('gs-label').textContent = groupSize;
+  quantizeWeights();
+  updateAll();
+});
+
+document.getElementById('dim-slider').addEventListener('input', function() {
+  dim = parseInt(this.value);
+  document.getElementById('dim-label').textContent = dim;
+  document.getElementById('dim-label2').textContent = dim;
+  canvasOrig.width = canvasQuant.width = dim;
+  canvasOrig.height = canvasQuant.height = dim;
+  generateWeights();
+  updateAll();
+});
+
+document.getElementById('btn-matrix').addEventListener('click', () => {
+  document.getElementById('hist-section').style.display = 'none';
+  showPacked = true;
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-matrix').classList.add('active');
+  updateAll();
+});
+
+document.getElementById('btn-packed').addEventListener('click', () => {
+  document.getElementById('hist-section').style.display = 'none';
+  showPacked = true;
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-packed').classList.add('active');
+  updateAll();
+});
+
+document.getElementById('btn-dist').addEventListener('click', () => {
+  document.getElementById('hist-section').style.display = 'block';
+  showPacked = false;
+  document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+  document.getElementById('btn-dist').classList.add('active');
+  drawHistogram();
+});
+
+generateWeights();
+updateAll();
+</script>
+</body>
+</html>
