@@ -2,7 +2,7 @@
 
 **Interactive ternary matrix visualization. Part of the 8b-is mesh.**
 
-https://mlx-quant-viz.pages.dev
+**[Live Demo](https://mlx-quant-viz.pages.dev)** | [GitHub Pages](https://8b-is.github.io/mlx-quant-viz/) | [matriq.net](https://mlx-quant-viz.pages.dev)
 
 ## What it shows
 
