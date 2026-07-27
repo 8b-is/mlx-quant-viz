@@ -1,0 +1,6 @@
+/*
+  Cache-Control: public, max-age=3600
+  X-Frame-Options: SAMEORIGIN
+
+/og-image.svg
+  Cache-Control: public, max-age=86400

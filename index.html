@@ -3,7 +3,26 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>mlx-quant-viz — ternary matrix {-1, 0, +1}</title>
+<title>MLX-QUANT Viz — Ternary Matrix {-1, 0, +1} | BitNet b1.58</title>
+<meta name="description" content="Interactive real-time visualization of ternary quantization (BitNet b1.58). See the weight matrix as {-1, 0, +1} color-coded pixels. 12.80x compression. Packed binary view, N→N-x recursion, distribution histogram. MLX-QUANT research tool.">
+<meta name="keywords" content="ternary quantization, bitnet, b1.58, mlx, metal, apple silicon, weight matrix, visualization, quantized matmul, packed binary, compression">
+<meta name="author" content="8b-is">
+<meta name="robots" content="index, follow">
+<link rel="canonical" href="https://matriq.net/">
+<meta property="og:title" content="MLX-QUANT Viz — Ternary Matrix {-1, 0, +1}">
+<meta property="og:description" content="See the weight matrix collapse into three states. 12.80x compression. Pixel-perfect ternary quantization visualization for BitNet b1.58 research.">
+<meta property="og:image" content="https://mlx-quant-viz.pages.dev/og-image.svg">
+<meta property="og:url" content="https://matriq.net/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="MLX-QUANT Viz">
+<meta property="og:locale" content="en_US">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="MLX-QUANT Viz — Ternary Matrix Visualizer">
+<meta name="twitter:description" content="Interactive ternary quantization visualization. Weight matrices as {-1, 0, +1} pixels.">
+<meta name="twitter:image" content="https://mlx-quant-viz.pages.dev/og-image.svg">
+<meta name="theme-color" content="#0b0c0e">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='6' fill='%230b0c0e'/><text x='16' y='23' text-anchor='middle' font-size='20' font-family='monospace' fill='%23a29bfe'>&Sigma;</text></svg>">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"MLX-QUANT Viz","applicationCategory":"DeveloperApplication","description":"Interactive ternary quantization matrix visualization for BitNet b1.58 research. See weights as {-1, 0, +1} with 12.80x compression.","url":"https://matriq.net/","author":{"@type":"Organization","name":"8b-is","url":"https://github.com/8b-is"},"operatingSystem":"Any","offers":{"@type":"Offer","price":"0"}}</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap');
   *{margin:0;padding:0;box-sizing:border-box}
@@ -99,7 +118,8 @@
   </div>
 </main>
 <footer>
-  <a href="https://github.com/8b-is/mlx-quant-viz">mlx-quant-viz</a> — ternary quantization visualization &middot; <a href="https://arxiv.org/abs/2402.17764">BitNet b1.58</a> &middot; 16 codes per word LSB-first &middot; code &minus; 1 = {-1, 0, +1} &middot; scale = mean(|w|)
+  <a href="https://github.com/8b-is/mlx-quant-viz">mlx-quant-viz</a> — ternary quantization visualization &middot; <a href="https://arxiv.org/abs/2402.17764">BitNet b1.58</a> &middot; 16 codes per word LSB-first &middot; code &minus; 1 = {-1, 0, +1}<br>
+  <a href="https://coder.vaked.dev" style="color:#6c5ce7">coder.vaked.dev</a> — the GPU node serving this research &middot; <a href="https://github.com/8b-is/MLX-QUANT" style="color:#a29bfe">MLX-QUANT</a> — native ternary kernels
 </footer>
 
 <script>
