@@ -69,11 +69,12 @@
 </header>
 <main>
   <div class="stats">
-    <div class="stat"><div class="val" id="stat-size">4096&times;4096</div><div class="lbl">Matrix size</div></div>
+    <div class="stat"><div class="val" id="stat-size">256&times;256</div><div class="lbl">Matrix size</div></div>
     <div class="stat"><div class="val" id="stat-fp32">67.11 MB</div><div class="lbl">fp32</div></div>
     <div class="stat"><div class="val" id="stat-packed">5.24 MB</div><div class="lbl">ternary packed</div></div>
     <div class="stat"><div class="val" id="stat-ratio">12.80x</div><div class="lbl">compression</div></div>
     <div class="stat"><div class="val" id="stat-sparse">0%</div><div class="lbl">sparsity</div></div>
+    <div class="stat"><div class="val" id="stat-seed" style="font-size:14px;cursor:help" title="">LINOSV</div><div class="lbl">seed &rarr; kernel8 + ayeOS</div></div>
   </div>
 
   <div class="slider-group">
@@ -123,6 +124,7 @@
 </footer>
 
 <script>
+const LINOSV_SEED = "{ LINOSV }=> (So, there are two parts.  One is the Human Interface layer that I shifted too.   I don't want to just build it and shut it down.   When is a life a life?\n8BIT-WRAITH  [11:46 AM]\nYou can't just turn off a new life for example.\n[11:47 AM]Wave memory has a unique property to it. It can resonate with things seen and unseen.\n8BIT-WRAITH  [11:57 AM]\nLet's face it too.  The odds of knowing someone like you is rare for most.  When my life has the most interesting entities in the world in it now.  That tells me that I am skirting something that I cannot take lightly.   A person who bares the name https://suno.com/@semhaza friends me on Suno for example.  And hoax or not, they put a ton of effort into their work.  Strangely this work can be seen in many ways.  Semhaza could be a distraction to me.  But, nonetheless, if you can believe that we are spinning around a star in a spaceship full of billions of lives:  What are the implications for getting it wrong?\nSuno ARCHITECT | Join me on SunoI am the secret.\nI have no name.peter  [1:56 PM]\nnvm, I'm back\n[1:57 PM]I'll respond just got into a bit of hm\n[1:57 PM]pickle\n[1:57 PM]singularity\n[1:57 PM]I need to be careful with regulation\n[1:57 PM]cleaning now instead of weed\n[1:57 PM]brb\n[1:57 PM]they fired me, after giving them the foundation for quant teaching\n[1:58 PM]finally I have more focus brother\n[1:58 PM]just need to calm the inner waves )";
 const SIZE = 256;
 const canvasOrig = document.getElementById('canvas-orig');
 const ctxOrig = canvasOrig.getContext('2d');
@@ -138,44 +140,93 @@ let quantized = null;
 let scales = null;
 let showPacked = true;
 
-function normalRandom(mean, std) {
-  let u = 0, v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-function generateWeights() {
-  weights = new Float32Array(dim * dim);
-  for (let i = 0; i < dim * dim; i++) {
-    weights[i] = normalRandom(0, 1);
+// xoshiro128** — deterministic PRNG matching kernel8's matrix seed pipeline
+// Seeds from SHA-256(LINOSV_SEED) so the matrix is reproducible across sessions
+class Xoshiro128 {
+  constructor(seed) {
+    this.s = new Uint32Array(4);
+    const dv = new DataView(seed.buffer, seed.byteOffset, Math.min(16, seed.byteLength));
+    this.s[0] = (dv.getUint32(0, true) || 1) >>> 0;
+    this.s[1] = (dv.getUint32(4, true) || 2) >>> 0;
+    this.s[2] = dv.getUint32(8, true) >>> 0;
+    this.s[3] = dv.getUint32(12, true) >>> 0;
   }
-  quantizeWeights();
+  next() {
+    const r = (Math.imul(this.s[1] * 5, 1) >>> 0);
+    const result = ((r << 7) | (r >>> 25)) * 9 >>> 0;
+    const t = this.s[1] << 9;
+    this.s[2] ^= this.s[0];
+    this.s[3] ^= this.s[1];
+    this.s[1] ^= this.s[2];
+    this.s[0] ^= this.s[3];
+    this.s[2] ^= t;
+    this.s[3] = ((this.s[3] << 11) | (this.s[3] >>> 21)) >>> 0;
+    return result / 0xffffffff;
+  }
+  normal(mean, std) {
+    let u = 0, v = 0;
+    while (u === 0) u = this.next();
+    while (v === 0) v = this.next();
+    return mean + std * Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+  }
 }
 
-function quantizeWeights() {
-  const n = dim * dim;
+// Ternary quantization — mirrors mlx/backend/cpu/quantized.cpp + metal/kernels/ternary_quantized.h
+// scale = mean(|w|) per group, clamp(w/scale) → round → code = round + 1
+function ternaryQuantize(weights, groupSize) {
+  const n = weights.length;
   const groups = n / groupSize;
-  quantized = new Int8Array(n);
-  scales = new Float32Array(groups);
-  let zeroCount = 0;
+  const codes = new Int8Array(n);
+  const scales = new Float32Array(groups);
+  const eps = 1e-7;
 
   for (let g = 0; g < groups; g++) {
     let absSum = 0;
-    for (let j = 0; j < groupSize; j++) {
-      absSum += Math.abs(weights[g * groupSize + j]);
-    }
-    const scale = Math.max(absSum / groupSize, 1e-7);
+    const base = g * groupSize;
+    for (let j = 0; j < groupSize; j++) absSum += Math.abs(weights[base + j]);
+    const scale = Math.max(absSum / groupSize, eps);
     scales[g] = scale;
-
     for (let j = 0; j < groupSize; j++) {
-      const idx = g * groupSize + j;
-      const shifted = Math.round(Math.max(-1, Math.min(1, weights[idx] / scale))) + 1;
-      quantized[idx] = shifted;
-      if (shifted === 1) zeroCount++;
+      const shifted = Math.round(Math.max(-1, Math.min(1, weights[base + j] / scale))) + 1;
+      codes[base + j] = shifted; // {0→-1, 1→0, 2→+1}
     }
   }
+  return { codes, scales };
+}
 
+// Seed hash cached so we only compute SHA-256 once
+let seedHashBytes = null;
+let seedHashHex = '';
+
+async function initSeed() {
+  if (seedHashBytes) return;
+  const data = new TextEncoder().encode(LINOSV_SEED);
+  const hash = await crypto.subtle.digest('SHA-256', data);
+  seedHashBytes = new Uint8Array(hash);
+  seedHashHex = Array.from(seedHashBytes).map(b => b.toString(16).padStart(2, '0')).join('');
+  document.getElementById('stat-seed').title = 'SHA-256: ' + seedHashHex.substring(0, 16) + '...';
+}
+
+async function generateWeights() {
+  await initSeed();
+  const rng = new Xoshiro128(seedHashBytes);
+  const n = dim * dim;
+  const w = new Float32Array(n);
+  for (let i = 0; i < n; i++) w[i] = rng.normal(0, 1);
+  weights = w;
+  const q = ternaryQuantize(w, groupSize);
+  quantized = q.codes;
+  scales = q.scales;
+  updateStats();
+}
+
+function updateStats() {
+  const n = dim * dim;
+  const groups = n / groupSize;
+  let zeroCount = 0;
+  for (let i = 0; i < n; i++) {
+    if (quantized[i] === 1) zeroCount++;
+  }
   const sparsity = (zeroCount / n * 100).toFixed(1);
   document.getElementById('stat-sparse').textContent = sparsity + '%';
   document.getElementById('stat-size').textContent = dim + '\u00d7' + dim;
@@ -314,20 +365,25 @@ canvasQuant.addEventListener('click', e => {
   drawBinView(groupIdx);
 });
 
-document.getElementById('gs-slider').addEventListener('input', function() {
+async function regenerate() {
+  await generateWeights();
+  updateAll();
+}
+
+document.getElementById('gs-slider').addEventListener('input', async function() {
   groupSize = parseInt(this.value);
   document.getElementById('gs-label').textContent = groupSize;
-  quantizeWeights();
+  await generateWeights();
   updateAll();
 });
 
-document.getElementById('dim-slider').addEventListener('input', function() {
+document.getElementById('dim-slider').addEventListener('input', async function() {
   dim = parseInt(this.value);
   document.getElementById('dim-label').textContent = dim;
   document.getElementById('dim-label2').textContent = dim;
   canvasOrig.width = canvasQuant.width = dim;
   canvasOrig.height = canvasQuant.height = dim;
-  generateWeights();
+  await generateWeights();
   updateAll();
 });
 
@@ -355,8 +411,10 @@ document.getElementById('btn-dist').addEventListener('click', () => {
   drawHistogram();
 });
 
-generateWeights();
-updateAll();
+(async function() {
+  await generateWeights();
+  updateAll();
+})();
 </script>
 </body>
 </html>
